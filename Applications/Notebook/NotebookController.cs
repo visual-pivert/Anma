@@ -43,8 +43,8 @@ public class NotebookController : ControllerBase
         return Ok(list);
     }
 
-    [HttpPut("{slug}")]
-    public async Task<IActionResult> UpdateNotebook(int workspaceId, string slug, [FromBody] CreateNotebookDto dto)
+    [HttpGet("{slug}")]
+    public async Task<ActionResult<NotebookEntity>> GetNotebook(int workspaceId, string slug)
     {
         var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
 
@@ -52,15 +52,49 @@ public class NotebookController : ControllerBase
             .Include(n => n.Workspace)
             .FirstOrDefaultAsync(n => n.Slug == slug && n.WorkspaceId == workspaceId && n.Workspace.OwnerId == userId);
 
-        if (notebook == null) return NotFound();
+        if (notebook == null)
+        {
+            _logger.LogWarning("GetNotebook: Notebook not found for slug {Slug}", slug);
+            return NotFound();
+        }
+
+        _logger.LogInformation("GetNotebook: Returning notebook {Name} for slug {Slug}", notebook.Name, slug);
+        return Ok(notebook);
+    }
+
+    [HttpPut("{slug}")]
+    public async Task<IActionResult> UpdateNotebook(int workspaceId, string slug, [FromBody] CreateNotebookDto dto)
+    {
+        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+
+        _logger.LogInformation("UpdateNotebook called with Name: {Name}", dto.Name);
+
+        var notebook = await _context.Notebooks
+            .Include(n => n.Workspace)
+            .FirstOrDefaultAsync(n => n.Slug == slug && n.WorkspaceId == workspaceId && n.Workspace.OwnerId == userId);
+
+        if (notebook == null)
+        {
+            _logger.LogWarning("UpdateNotebook: Notebook not found for slug {Slug}", slug);
+            return NotFound();
+        }
 
         notebook.Name = dto.Name;
         notebook.Content = JsonSerializer.Serialize(dto.Content);
-        notebook.Slug = SlugHelper.GenerateSlug(dto.Name);
+
+        if (notebook.Name != dto.Name)
+        {
+            notebook.Slug = SlugHelper.GenerateSlug(dto.Name);
+            _logger.LogInformation("Slug changed to {NewSlug}", notebook.Slug);
+        }
 
         await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Notebook {Name} saved successfully", notebook.Name);
+
         return Ok(notebook);
     }
+
 
     [HttpDelete("{slug}")]
     public async Task<IActionResult> DeleteNotebook(int workspaceId, string slug)
@@ -79,11 +113,15 @@ public class NotebookController : ControllerBase
         return NoContent();
     }
 
+
     [HttpPost("execute-cell")]
-    public async Task<IActionResult> ExecuteCell([FromBody] ExecuteCodeDto dto)
+    public async Task<IActionResult> ExecuteCell([FromBody] ExecuteCodeDto dto, int workspaceId)
     {
         try
         {
+            var token = GetTokenFromRequest();
+            _notebookService.SetTokenAndWorkspace(token, workspaceId);
+
             await _notebookService.InitializeKernelAsync();
 
             var result = await _notebookService.ExecuteCellAsync(dto);
@@ -100,21 +138,42 @@ public class NotebookController : ControllerBase
     }
 
     [HttpPost("execute-notebook")]
-    public async Task<IActionResult> ExecuteNotebook([FromBody] List<ExecuteCodeDto> cells)
+    public async Task<IActionResult> ExecuteNotebook([FromBody] List<ExecuteCodeDto> cells, int workspaceId)
     {
-        await _notebookService.InitializeKernelAsync();
-
-        var allResults = new List<ExecuteCodeDto>();
-
-        foreach (var cell in cells)
+        try
         {
-            var result = await _notebookService.ExecuteCellAsync(cell);
-            allResults.Add(result);
+            var token = GetTokenFromRequest();
+            _notebookService.SetTokenAndWorkspace(token, workspaceId);
+
+            await _notebookService.InitializeKernelAsync();
+
+            var allResults = new List<ExecuteCodeDto>();
+
+            foreach (var cell in cells)
+            {
+                var result = await _notebookService.ExecuteCellAsync(cell);
+                allResults.Add(result);
+            }
+
+            await _notebookService.ShutdownKernelAsync();
+
+            return Ok(allResults);
         }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erreur d'exécution notebook.");
+            return StatusCode(500, "Erreur lors de l'exécution.");
+        }
+    }
 
-        await _notebookService.ShutdownKernelAsync();
-
-        return Ok(allResults);
+    private string GetTokenFromRequest()
+    {
+        var authHeader = HttpContext.Request.Headers["Authorization"].FirstOrDefault();
+        if (authHeader != null && authHeader.StartsWith("Bearer "))
+        {
+            return authHeader.Substring("Bearer ".Length).Trim();
+        }
+        return string.Empty;
     }
 }
 

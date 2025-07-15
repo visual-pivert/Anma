@@ -292,3 +292,4 @@
 /home/visualpivert/Projects/anma/Anma/bin/Debug/net9.0/Microsoft.IO.RecyclableMemoryStream.dll
 /home/visualpivert/Projects/anma/Anma/bin/Debug/net9.0/System.Reactive.dll
 /home/visualpivert/Projects/anma/Anma/bin/Debug/net9.0/Websocket.Client.dll
+/home/visualpivert/Projects/anma/Anma/obj/Debug/net9.0/Anma.sourcelink.json

@@ -66,5 +66,36 @@ public class TableService
         return await _context.Tables
             .FirstOrDefaultAsync(t => t.DatabaseId == db.Id && t.Slug == tableSlug);
     }
+
+    public async Task<TableEntity?> UpdateAsync(int workspaceId, string dbSlug, string tableSlug, CreateTableDto dto, string? newColumnsJson, ClaimsPrincipal user)
+    {
+        var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+
+        var db = await _context.Databases
+            .Include(d => d.Workspace)
+            .FirstOrDefaultAsync(d => d.Slug == dbSlug && d.WorkspaceId == workspaceId && d.Workspace.OwnerId == userId);
+
+        if (db == null) return null;
+
+        var table = await _context.Tables
+            .FirstOrDefaultAsync(t => t.DatabaseId == db.Id && t.Slug == tableSlug);
+
+        if (table == null) return null;
+
+        if (!string.IsNullOrWhiteSpace(dto.Name))
+        {
+            table.Name = dto.Name;
+            table.Slug = SlugHelper.GenerateSlug(dto.Name);
+        }
+
+        if (!string.IsNullOrWhiteSpace(newColumnsJson))
+        {
+            table.ColumnsJson = newColumnsJson;
+        }
+
+        await _context.SaveChangesAsync();
+        return table;
+    }
+
 }
 

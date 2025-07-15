@@ -11,10 +11,20 @@ public class NotebookExecutionService : IDisposable
     private WebsocketClient? _wsClient;
     private string? _kernelId;
 
+    private string _token = ""; // token dynamique
+    private int _workspaceId = 0; // workspace dynamique
+    private string _baseUrl = "http://localhost:5105";
+
     public NotebookExecutionService(IHttpClientFactory httpClientFactory)
     {
         _httpClientFactory = httpClientFactory;
         _httpClient = _httpClientFactory.CreateClient();
+    }
+
+    public void SetTokenAndWorkspace(string token, int workspaceId)
+    {
+        _token = token;
+        _workspaceId = workspaceId;
     }
 
     public async Task InitializeKernelAsync()
@@ -28,6 +38,10 @@ public class NotebookExecutionService : IDisposable
         var wsUrl = new Uri($"ws://localhost:8888/api/kernels/{_kernelId}/channels");
         _wsClient = new WebsocketClient(wsUrl);
         await _wsClient.Start();
+
+        var preloadCode = GeneratePreloadCode();
+        var preloadDto = new ExecuteCodeDto { Input = preloadCode };
+        await ExecuteCellAsync(preloadDto);
     }
 
     public async Task<ExecuteCodeDto> ExecuteCellAsync(ExecuteCodeDto input)
@@ -117,5 +131,53 @@ public class NotebookExecutionService : IDisposable
     {
         _wsClient?.Dispose();
     }
+
+    private string GeneratePreloadCode()
+    {
+        return $@"
+token = '{_token}'
+workspace_id = {_workspaceId}
+base_url = '{_baseUrl.TrimEnd('/')}'  # enlève un éventuel '/' final
+
+import requests
+import pandas as pd
+import json
+
+def fetch_databases():
+    headers = {{'Authorization': f'Bearer {{token}}'}}
+    url = f'{{base_url}}/workspaces/{{workspace_id}}/databases'
+    r = requests.get(url, headers=headers)
+    r.raise_for_status()
+    return r.json()
+
+def fetch_tables(database_slug):
+    headers = {{'Authorization': f'Bearer {{token}}'}}
+    url = f'{{base_url}}/workspaces/{{workspace_id}}/databases/{{database_slug}}/tables'
+    r = requests.get(url, headers=headers)
+    r.raise_for_status()
+    return r.json()
+
+def fetch_table_as_df(database_slug, table_slug):
+    headers = {{'Authorization': f'Bearer {{token}}'}}
+    url = f'{{base_url}}/workspaces/{{workspace_id}}/databases/{{database_slug}}/tables'
+    r = requests.get(url, headers=headers)
+    r.raise_for_status()
+    tables = r.json()
+
+    table_entry = next((t for t in tables if t['slug'] == table_slug), None)
+    if table_entry is None:
+        raise ValueError(f'Table slug ""{{table_slug}}"" not found')
+
+    columns_data = json.loads(table_entry['columnsJson'])
+
+    columns = {{}}
+    for col_name, col_info in columns_data.items():
+        columns[col_name] = col_info['value']
+
+    return pd.DataFrame(columns)
+";
+    }
+
+
 }
 

@@ -50,25 +50,6 @@ public class TableController : ControllerBase
         return Ok(table);
     }
 
-    [HttpPut("{tableSlug}")]
-    public async Task<IActionResult> UpdateTable(int workspaceId, string dbSlug, string tableSlug, [FromBody] CreateTableDto dto)
-    {
-        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
-
-        var table = await _context.Tables
-            .Include(t => t.Database)
-            .ThenInclude(d => d.Workspace)
-            .FirstOrDefaultAsync(t => t.Slug == tableSlug && t.Database.Slug == dbSlug && t.Database.WorkspaceId == workspaceId && t.Database.Workspace.OwnerId == userId);
-
-        if (table == null) return NotFound();
-
-        table.Name = dto.Name;
-        table.Slug = SlugHelper.GenerateSlug(dto.Name);
-
-        await _context.SaveChangesAsync();
-        return Ok(table);
-    }
-
     [HttpDelete("{tableSlug}")]
     public async Task<IActionResult> DeleteTable(int workspaceId, string dbSlug, string tableSlug)
     {
@@ -85,5 +66,20 @@ public class TableController : ControllerBase
         await _context.SaveChangesAsync();
         return NoContent();
     }
+
+    [HttpPut("{tableSlug}")]
+    public async Task<IActionResult> UpdateTable(int workspaceId, string dbSlug, string tableSlug, [FromBody] UpdateTableDto dto)
+    {
+        var updated = await _service.UpdateAsync(workspaceId, dbSlug, tableSlug, new CreateTableDto
+        {
+            Name = dto.Name ?? ""
+        }, dto.ColumnsJson, User);
+
+        if (updated == null)
+            return NotFound();
+
+        return Ok(updated);
+    }
+
 }
 

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Anma")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b1a3cdfd8d53b78d4bde821c0398a8fc05d8fc9e")]
 [assembly: System.Reflection.AssemblyProductAttribute("Anma")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Anma")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
